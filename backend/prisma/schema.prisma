@@ -7,6 +7,29 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  ADMIN
+  EDITOR
+  REVIEWER
+  USER
+}
+
+enum SourceType {
+  official_fia
+  official_f1
+  official_team
+  team_principal
+  driver
+  engineer
+  journalist
+  reputable_media
+  insider
+  social_media
+  forum
+  fan_theory
+  unknown
+}
+
 enum ClaimStatus {
   unconfirmed
   watching
@@ -34,35 +57,96 @@ enum ClaimType {
   other
 }
 
-enum SourceType {
-  official_fia
-  official_f1
-  official_team
-  team_principal
-  driver
-  engineer
-  journalist
-  reputable_media
-  insider
-  social_media
-  forum
-  fan_theory
-  unknown
+enum StatementIntent {
+  informational
+  prediction
+  denial
+  accusation
+  pr_statement
+  technical_analysis
+  political_pressure
+}
+
+enum LegalSensitivity {
+  normal
+  medium
+  high
+}
+
+enum EvidenceStance {
+  supports
+  confirms
+  refutes
+  neutral_update
+  contradicts
+}
+
+enum ClaimReviewStatus {
+  scheduled
+  completed
+  skipped
+  overdue
+}
+
+enum SourceScoreTopic {
+  overall
+  driver_market
+  technical_updates
+  technical_illegality
+  team_politics
+  regulations
+  race_strategy
+}
+
+enum DatasetType {
+  chat_finetuning
+  classification
+  extraction
+  rag_eval
+  preference
+}
+
+enum DatasetExampleStatus {
+  draft
+  needs_review
+  approved
+  rejected
+  exported
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdClaims   Claim[]       @relation("ClaimCreatedBy")
+  claimReviews    ClaimReview[] @relation("ClaimReviewedBy")
+  datasetsCreated Dataset[]
 }
 
 model Source {
-  id              String   @id @default(uuid())
+  id              String     @id @default(uuid())
   name            String
   type            SourceType
   description     String?
   websiteUrl      String?
+  country         String?
+  language        String?
+  team            String?
   baseReliability Float?
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   articles Article[]
   claims   Claim[]
+  scores   SourceScore[]
+
+  @@index([name])
+  @@index([type])
 }
 
 model Article {
@@ -70,44 +154,84 @@ model Article {
   sourceId    String?
   title       String
   url         String?  @unique
-  summary     String?
-  rawText     String?
+  language    String?
   publishedAt DateTime?
   importedAt  DateTime @default(now())
+  rawText     String?
+  summary     String?
+  contentHash String?
+  metadata    Json?
+  entities    Json?
 
   source Source? @relation(fields: [sourceId], references: [id])
   claims Claim[]
+  chunks ArticleChunk[]
+
+  @@index([publishedAt])
+  @@index([sourceId])
+}
+
+model ArticleChunk {
+  id        String @id @default(uuid())
+  articleId String
+  text      String
+  index     Int
+  metadata  Json?
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
+  @@unique([articleId, index])
 }
 
 model Claim {
-  id                  String      @id @default(uuid())
-  sourceId            String
-  articleId           String?
-  claimText           String
-  claimType           ClaimType
-  status              ClaimStatus @default(unconfirmed)
-  legalSensitivity    String      @default("normal")
-  statementIntent     String      @default("informational")
-  publishedAt         DateTime?
-  expectedResolveAt   DateTime?
-  nextReviewAt        DateTime?
-  resolvedAt          DateTime?
-  confidenceInitial   Float       @default(0.5)
-  confidenceCurrent   Float       @default(0.5)
-  specificityScore    Float       @default(0.5)
-  originalityScore    Float       @default(0.5)
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  id                 String          @id @default(uuid())
+  sourceId           String
+  articleId          String?
+  createdById        String?
+  claimText          String
+  claimType          ClaimType
+  status             ClaimStatus     @default(unconfirmed)
+  statementIntent    StatementIntent @default(informational)
+  legalSensitivity   LegalSensitivity @default(normal)
+  season             Int?
+  teams              String[]
+  drivers            String[]
+  tags               String[]
+  notes              String?
+  publishedAt        DateTime?
+  expectedResolveAt  DateTime?
+  nextReviewAt       DateTime?
+  resolvedAt         DateTime?
+  confidenceInitial  Float           @default(0.5)
+  confidenceCurrent  Float           @default(0.5)
+  specificityScore   Float           @default(0.5)
+  originalityScore   Float           @default(0.5)
+  resolutionStatus   String?
+  metadata           Json?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
-  source   Source   @relation(fields: [sourceId], references: [id])
-  article  Article? @relation(fields: [articleId], references: [id])
-  evidence Evidence[]
+  source      Source        @relation(fields: [sourceId], references: [id])
+  article     Article?      @relation(fields: [articleId], references: [id])
+  createdBy   User?         @relation("ClaimCreatedBy", fields: [createdById], references: [id])
+  evidences   Evidence[]
+  reviews     ClaimReview[]
+  snapshots   ClaimSnapshot[]
+  scoreImpacts SourceScoreImpact[]
+
+  @@index([sourceId])
+  @@index([articleId])
+  @@index([status])
+  @@index([claimType])
+  @@index([nextReviewAt])
+  @@index([expectedResolveAt])
 }
 
 model Evidence {
-  id                String   @id @default(uuid())
+  id                String         @id @default(uuid())
   claimId           String
-  stance            String
+  stance            EvidenceStance
   sourceType        SourceType?
   sourceName        String?
   title             String
@@ -115,7 +239,115 @@ model Evidence {
   summary           String?
   reliabilityWeight Float?
   publishedAt       DateTime?
-  createdAt         DateTime @default(now())
+  metadata          Json?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
-  claim Claim @relation(fields: [claimId], references: [id])
+  claim Claim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+  @@index([stance])
+}
+
+model ClaimReview {
+  id           String           @id @default(uuid())
+  claimId      String
+  reviewerId   String?
+  reviewAt     DateTime
+  completedAt  DateTime?
+  status       ClaimReviewStatus @default(scheduled)
+  notes        String?
+  skipReason   String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  claim    Claim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("ClaimReviewedBy", fields: [reviewerId], references: [id])
+
+  @@index([claimId])
+  @@index([reviewAt])
+  @@index([status])
+}
+
+model ClaimSnapshot {
+  id                String      @id @default(uuid())
+  claimId           String
+  status            ClaimStatus
+  confidenceCurrent Float
+  notes             String?
+  changedAt         DateTime    @default(now())
+
+  claim Claim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([claimId])
+  @@index([changedAt])
+}
+
+model SourceScore {
+  id                  String           @id @default(uuid())
+  sourceId            String
+  topic               SourceScoreTopic
+  score               Float
+  resolvedClaimsCount Int              @default(0)
+  confirmedCount      Int              @default(0)
+  partialCount        Int              @default(0)
+  refutedCount        Int              @default(0)
+  expiredCount        Int              @default(0)
+  lastCalculatedAt    DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  source  Source              @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  impacts SourceScoreImpact[]
+
+  @@index([sourceId])
+  @@unique([sourceId, topic])
+}
+
+model SourceScoreImpact {
+  id            String   @id @default(uuid())
+  sourceScoreId String
+  claimId       String
+  impactWeight  Float
+  createdAt     DateTime @default(now())
+
+  sourceScore SourceScore @relation(fields: [sourceScoreId], references: [id], onDelete: Cascade)
+  claim       Claim       @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  @@index([sourceScoreId])
+  @@index([claimId])
+  @@unique([sourceScoreId, claimId])
+}
+
+model Dataset {
+  id          String      @id @default(uuid())
+  name        String
+  type        DatasetType
+  description String?
+  metadata    Json?
+  createdById String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  createdBy User?            @relation(fields: [createdById], references: [id])
+  examples  DatasetExample[]
+
+  @@index([type])
+  @@index([createdById])
+}
+
+model DatasetExample {
+  id         String               @id @default(uuid())
+  datasetId  String
+  input      Json
+  output     Json?
+  metadata   Json?
+  status     DatasetExampleStatus @default(draft)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  dataset Dataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@index([datasetId])
+  @@index([status])
 }
