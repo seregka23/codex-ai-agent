@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ClaimStatus {
+  unconfirmed
+  watching
+  confirmed
+  refuted
+  partially_confirmed
+  disputed
+  outdated
+  expired
+  unverifiable
+}
+
+enum ClaimType {
+  driver_market
+  technical_update
+  technical_illegality
+  regulation_change
+  team_politics
+  contract_extension
+  sponsor_deal
+  car_performance
+  race_strategy
+  management_change
+  fia_investigation
+  other
+}
+
+enum SourceType {
+  official_fia
+  official_f1
+  official_team
+  team_principal
+  driver
+  engineer
+  journalist
+  reputable_media
+  insider
+  social_media
+  forum
+  fan_theory
+  unknown
+}
+
+model Source {
+  id              String   @id @default(uuid())
+  name            String
+  type            SourceType
+  description     String?
+  websiteUrl      String?
+  baseReliability Float?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  articles Article[]
+  claims   Claim[]
+}
+
+model Article {
+  id          String   @id @default(uuid())
+  sourceId    String?
+  title       String
+  url         String?  @unique
+  summary     String?
+  rawText     String?
+  publishedAt DateTime?
+  importedAt  DateTime @default(now())
+
+  source Source? @relation(fields: [sourceId], references: [id])
+  claims Claim[]
+}
+
+model Claim {
+  id                  String      @id @default(uuid())
+  sourceId            String
+  articleId           String?
+  claimText           String
+  claimType           ClaimType
+  status              ClaimStatus @default(unconfirmed)
+  legalSensitivity    String      @default("normal")
+  statementIntent     String      @default("informational")
+  publishedAt         DateTime?
+  expectedResolveAt   DateTime?
+  nextReviewAt        DateTime?
+  resolvedAt          DateTime?
+  confidenceInitial   Float       @default(0.5)
+  confidenceCurrent   Float       @default(0.5)
+  specificityScore    Float       @default(0.5)
+  originalityScore    Float       @default(0.5)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  source   Source   @relation(fields: [sourceId], references: [id])
+  article  Article? @relation(fields: [articleId], references: [id])
+  evidence Evidence[]
+}
+
+model Evidence {
+  id                String   @id @default(uuid())
+  claimId           String
+  stance            String
+  sourceType        SourceType?
+  sourceName        String?
+  title             String
+  url               String?
+  summary           String?
+  reliabilityWeight Float?
+  publishedAt       DateTime?
+  createdAt         DateTime @default(now())
+
+  claim Claim @relation(fields: [claimId], references: [id])
+}
