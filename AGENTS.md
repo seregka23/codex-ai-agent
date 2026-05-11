@@ -1,20 +1,44 @@
 # AGENTS.md — Project Instructions
 
-## Стек проекта
-- **Backend:** NestJS (TypeScript strict) + Prisma ORM + PostgreSQL
-- **Frontend:** Angular 17+ (standalone components) + Angular Material
-- **Infrastructure:** Docker + docker-compose + nginx
-- **Tests:** Jest (backend), Jasmine/Jest (frontend)
+## Stack
+- Backend: NestJS + TypeScript strict + Prisma ORM + PostgreSQL
+- Frontend: Angular 17+ standalone components + Angular Material
+- Infrastructure: Docker + docker-compose + nginx
+- Tests: Jest for backend; project-standard Angular tests for frontend
 
----
+## How Codex should read this setup
 
-## Структура проекта
-```
+This repository uses two different mechanisms:
+
+1. **Project instructions**: `AGENTS.md` files.
+   - Root `AGENTS.md` contains global project rules.
+   - `backend/AGENTS.md` adds backend-specific rules.
+   - `frontend/AGENTS.md` adds frontend-specific rules.
+
+2. **Reusable skills**: `.agents/skills/*/SKILL.md`.
+   - Mention them as `$prisma`, `$nestjs`, `$angular`, `$docker`, `$reviewer`, `$orchestrator`.
+   - Skills are workflows/instructions, not separate subagent identities.
+
+3. **Custom subagents**: `.codex/agents/*.toml`.
+   - Use these names when asking Codex to spawn subagents:
+     - `prisma_agent`
+     - `nestjs_agent`
+     - `angular_agent`
+     - `docker_agent`
+     - `code_reviewer`
+
+Do not confuse skill names with custom agent names:
+- `$nestjs` = skill/workflow
+- `nestjs_agent` = custom subagent role
+
+## Project structure
+
+```text
 project/
 ├── backend/
 │   ├── src/
-│   │   ├── modules/        # Один модуль = одна бизнес-фича
-│   │   ├── common/         # Guards, Pipes, Interceptors, Decorators
+│   │   ├── modules/        # one module = one business feature
+│   │   ├── common/         # guards, pipes, interceptors, decorators
 │   │   └── config/         # ConfigModule, env validation
 │   └── prisma/
 │       ├── schema.prisma
@@ -22,84 +46,92 @@ project/
 │       └── seed.ts
 ├── frontend/
 │   └── src/app/
-│       ├── core/           # Singleton сервисы, guards, interceptors
-│       ├── shared/         # Переиспользуемые компоненты и pipes
-│       └── features/       # Фичи с lazy loading
-└── docker/
-    ├── docker-compose.yml
-    ├── docker-compose.prod.yml
-    └── nginx/
+│       ├── core/           # singleton services, guards, interceptors
+│       ├── shared/         # reusable components and pipes
+│       └── features/       # lazy-loaded features
+├── docker/
+│   ├── docker-compose.yml
+│   ├── docker-compose.prod.yml
+│   └── nginx/
+├── .agents/skills/         # Codex skills
+└── .codex/agents/          # Codex custom subagents
 ```
 
----
-
-## Общие правила
+## General rules
 
 ### TypeScript
-- Всегда `strict` mode — никаких `any`
-- Явные типы возвращаемых значений у публичных методов
-- `interface` для объектов, `type` для union/intersection
+- Use strict TypeScript.
+- Avoid `any`; if unavoidable, explain why.
+- Use explicit return types for public methods.
+- Use `interface` for object shapes and `type` for union/intersection types.
 
-### Именование файлов
-- Файлы: `kebab-case` → `users.service.ts`, `create-user.dto.ts`
-- Классы/интерфейсы: `PascalCase` → `UsersService`, `CreateUserDto`
-- Переменные/функции: `camelCase` → `findAllUsers()`
-- Константы: `UPPER_SNAKE_CASE` → `MAX_RETRY_COUNT`
+### Naming
+- Files: `kebab-case`, for example `users.service.ts`, `create-user.dto.ts`.
+- Classes/interfaces: `PascalCase`, for example `UsersService`, `CreateUserDto`.
+- Variables/functions: `camelCase`, for example `findAllUsers()`.
+- Constants: `UPPER_SNAKE_CASE`, for example `MAX_RETRY_COUNT`.
 
-### Безопасность
-- Никаких секретов в коде — только через переменные окружения
-- Все входящие данные валидировать обязательно
-- Все HTTP эндпоинты требуют авторизации по умолчанию
-- Пароли только через bcrypt, никогда не возвращать в ответе
+### Security
+- Do not commit secrets; use environment variables.
+- Validate all external input.
+- HTTP endpoints require authorization by default unless explicitly marked public.
+- Passwords must be hashed and never returned in responses.
 
-### Качество кода
-- Нет `console.log` в production — только `Logger` (NestJS)
-- Нет пустых `catch` блоков
-- Нет закомментированного кода в коммитах
-- Запускай `npm run lint` перед коммитом
+### Code quality
+- Use NestJS `Logger`, not `console.log`, in production code.
+- No empty `catch` blocks.
+- No commented-out code in final changes.
+- Prefer small, focused changes.
 
-### Git коммиты
-Формат: `тип(scope): описание`
-Типы: `feat` `fix` `refactor` `test` `docs` `chore` `style`
-Пример: `feat(users): добавить эндпоинт создания пользователя`
+## Domain boundaries
 
----
-
-## Границы доменов
-
-| Агент (skill) | Пишет | Только читает |
+| Role | Writes | Reads |
 |---|---|---|
-| **$prisma** | `backend/prisma/**` | `backend/src/modules/` |
-| **$nestjs** | `backend/src/**` | `backend/prisma/schema.prisma` |
-| **$angular** | `frontend/src/**` | `frontend/src/environments/` |
-| **$docker** | `docker/**`, `Dockerfile`, `docker-compose*` | `backend/src/`, `frontend/src/` |
-| **$reviewer** | ничего не пишет | всё |
+| `prisma_agent` / `$prisma` | `backend/prisma/**` | `backend/src/modules/**` |
+| `nestjs_agent` / `$nestjs` | `backend/src/**` | `backend/prisma/schema.prisma` |
+| `angular_agent` / `$angular` | `frontend/src/**` | frontend config and API contracts |
+| `docker_agent` / `$docker` | `docker/**`, Dockerfiles, compose/env examples | backend/frontend package and build files |
+| `code_reviewer` / `$reviewer` | nothing | everything |
 
----
+## Feature workflow
 
-## Порядок работы при новой фиче
+For a feature touching multiple domains:
 
-```
-1. $prisma   → схема + миграция      (если нужна БД)
-2. $nestjs   → API + бизнес-логика
-3. $angular  → UI компоненты         (можно параллельно с $nestjs)
-4. $docker   → инфраструктура        (если нужны изменения)
-5. $reviewer → финальная проверка
-```
+1. Ask `prisma_agent` to inspect or update schema/migrations when DB changes are needed.
+2. Ask `nestjs_agent` to implement API and backend logic.
+3. Ask `angular_agent` to implement UI; it can run in parallel with backend only when the API contract is already clear.
+4. Ask `docker_agent` only when infrastructure/startup changes are needed.
+5. Ask `code_reviewer` to review the final diff.
 
-> **$prisma всегда первый** — остальные зависят от схемы.
+Example prompt:
 
----
-
-## Subagents
-
-Для параллельного выполнения используй subagents:
-```
-Используй subagents для параллельного запуска $nestjs и $angular
-если их задачи не зависят друг от друга.
+```text
+Implement the Products feature. Spawn custom subagents:
+- prisma_agent: design/update Product schema and migration.
+- nestjs_agent: implement ProductsModule CRUD API after Prisma is ready.
+- angular_agent: implement Products UI after the API contract is clear.
+- code_reviewer: review the final diff.
+Wait for all agents and summarize the result.
 ```
 
-Для code review:
-```
-/review — запустить code review через отдельный агент
-```
+
+## Subagent policy
+
+For any non-trivial implementation task, Codex must use subagents when the task touches more than one area of the project.
+
+Use these custom subagents:
+
+- `prisma_agent` for database schema, migrations, relations, indexes, seeds, and query risks.
+- `nestjs_agent` for backend modules, controllers, services, DTOs, validation, and business logic.
+- `angular_agent` for Angular components, Angular Material UI, forms, routing, services, and accessibility.
+- `docker_agent` for Dockerfile, docker-compose, devcontainer, environment variables, volumes, ports, and local setup.
+- `code_reviewer` for final review of correctness, security, regression risks, and missing tests.
+
+When the task is complex, Codex should:
+1. First create a short implementation plan.
+2. Spawn the relevant subagents.
+3. Wait for all subagents to finish.
+4. Merge their findings into one final implementation.
+5. Ask `code_reviewer` to review the final diff before the final response.
+
+Do not use subagents for very small single-file changes, typo fixes, simple renames, or trivial documentation edits.
