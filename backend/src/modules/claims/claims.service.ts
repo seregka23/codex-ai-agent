@@ -15,6 +15,10 @@ export class ClaimsService {
     return this.claims;
   }
 
+
+  public findBySource(sourceId: string): Claim[] {
+    return this.claims.filter((claim) => claim.sourceId === sourceId);
+  }
   public findOne(id: string): Claim {
     const claim = this.claims.find((item) => item.id === id);
     if (!claim) throw new NotFoundException('Claim not found');
