@@ -23,6 +23,8 @@ export type ClaimType =
   | 'fia_investigation'
   | 'other';
 
+export type LegalSensitivity = 'normal' | 'medium' | 'high';
+
 export interface Claim {
   id: string;
   sourceId: string;
@@ -32,5 +34,14 @@ export interface Claim {
   publishedAt?: string;
   expectedResolveAt?: string;
   nextReviewAt?: string;
-  legalSensitivity: 'normal' | 'medium' | 'high';
+  resolvedAt?: string;
+  legalSensitivity: LegalSensitivity;
+}
+
+export interface ClaimTimelineEvent {
+  id: string;
+  claimId: string;
+  type: 'created' | 'evidence_added' | 'review_scheduled' | 'status_changed' | 'review_completed';
+  description: string;
+  createdAt: string;
 }
