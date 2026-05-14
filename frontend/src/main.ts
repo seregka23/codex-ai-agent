@@ -1,11 +1,7 @@
+import { provideHttpClient } from '@angular/common/http';
 import { bootstrapApplication } from '@angular/platform-browser';
-import { Component } from '@angular/core';
+import { AppShellComponent } from './app/shared/components/app-shell.component';
 
-@Component({
-  selector: 'app-root',
-  standalone: true,
-  template: '<h1>Frontend initialized</h1>'
-})
-class AppComponent {}
-
-void bootstrapApplication(AppComponent);
+void bootstrapApplication(AppShellComponent, {
+  providers: [provideHttpClient()],
+});
