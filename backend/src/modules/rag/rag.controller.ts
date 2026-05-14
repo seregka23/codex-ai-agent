@@ -1,4 +1,5 @@
 import { Body, Controller, Post } from '@nestjs/common';
+import { Public } from '../../common/decorators/public.decorator';
 import { RagAskResponse, RagContext, RagSearchItem, RagSearchRequest } from './rag.types';
 import { RagService } from './rag.service';
 
@@ -7,6 +8,7 @@ interface RagAskRequest {
   filters?: RagSearchRequest['filters'];
 }
 
+@Public()
 @Controller('rag')
 export class RagController {
   public constructor(private readonly ragService: RagService) {}
